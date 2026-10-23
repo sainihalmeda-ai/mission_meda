@@ -4,10 +4,10 @@ import hmac
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from . import agents, config, health, memory, procs
+from . import agents, config, health, memory, procs, voice
 from .brain import Crew
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -39,6 +39,11 @@ class Login(BaseModel):
 class Chat(BaseModel):
     text: str
     agent: str | None = None
+
+
+class Speak(BaseModel):
+    text: str
+    agent: str = ""
 
 
 class Decision(BaseModel):
@@ -73,6 +78,19 @@ def chat(body: Chat):
 @app.post("/api/decide")
 def decide(body: Decision):
     return get_crew().decide(body.approval_id, body.decisions)
+
+
+@app.post("/api/speak")
+async def speak(body: Speak):
+    """Turn a reply into speech with a natural Telugu, Hindi or English voice."""
+    try:
+        audio = await voice.synthesize(body.agent, body.text)
+    except Exception as e:
+        print(f"[voice] online voices unavailable: {type(e).__name__}: {e}")
+        raise HTTPException(503, "Online voices unavailable")
+    if not audio:
+        return Response(status_code=204)
+    return Response(audio, media_type="audio/mpeg")
 
 
 @app.get("/api/health")

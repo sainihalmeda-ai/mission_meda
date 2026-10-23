@@ -192,3 +192,31 @@ def test_gemini_router_and_free_limit():
         assert r["agent"] == "jyothi" and "free requests" in r["text"]
     finally:
         config.DAILY_REQUEST_LIMIT = old
+
+
+def test_voice_picks_language_and_agent_voice(monkeypatch):
+    import asyncio
+    import sys
+    import types as pytypes
+
+    from meda import voice
+
+    assert voice.language_of("సరే, DBMS exam add చేశాను") == "te"
+    assert voice.language_of("ठीक है भाई") == "hi"
+    assert voice.pick("indu", "నమస్తే")[0] == "te-IN-ShrutiNeural"
+    assert voice.pick("ramu", "hello")[0] == "en-IN-PrabhatNeural"
+    assert "Code is on screen" in voice.speakable("Run this:\n```\nnpm test\n```")
+
+    seen = {}
+
+    class FakeCommunicate:
+        def __init__(self, text, v, rate, pitch):
+            seen.update(text=text, voice=v, rate=rate, pitch=pitch)
+
+        async def stream(self):
+            yield {"type": "audio", "data": b"ID3"}
+            yield {"type": "WordBoundary"}
+
+    monkeypatch.setitem(sys.modules, "edge_tts", pytypes.SimpleNamespace(Communicate=FakeCommunicate))
+    audio = asyncio.run(voice.synthesize("sonu", "**అన్న** చెప్తున్నా 🧑‍🎓"))
+    assert audio == b"ID3" and seen["voice"] == "te-IN-MohanNeural" and "*" not in seen["text"]

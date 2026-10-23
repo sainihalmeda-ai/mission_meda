@@ -11,6 +11,7 @@ if [ ! -x ".venv/bin/python" ]; then
   echo "First-time setup: installing Mission MEDA. This takes a minute or two..."
   python3 -m venv .venv
   .venv/bin/python -m pip install --upgrade pip >/dev/null
-  .venv/bin/python -m pip install -r requirements.txt
 fi
+# Installs anything new after an update; quick when nothing changed.
+.venv/bin/python -m pip install -q -r requirements.txt
 .venv/bin/python run.py "$@"

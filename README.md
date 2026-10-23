@@ -51,6 +51,9 @@ Everything runs on your own computer. Memory is one file: `data/meda.sqlite3`.
 
 Keep the black window open while you use the crew. Close it to switch them off.
 
+**Updating:** download the new ZIP and extract it, then copy the `.env` file (and `vault.env` and the `data` folder,
+if you have them) from your old Mission MEDA folder into the new one. That keeps your key, memory and settings.
+
 **Optional, credentials for Lochu:** copy `vault.env.example` to `vault.env` and add lines like `GITHUB_TOKEN=ghp_...`.
 Lochu sees only the names and uses them in commands as `$GITHUB_TOKEN`. Values are hidden from anything the AI reads.
 
@@ -73,10 +76,9 @@ Your laptop must stay on while you use it.
 - Code and commands appear on screen but aren't read aloud.
 - **Board** shows Jyothi's health panel, your task list, applications and mood log.
 
-**Telugu voice missing?** Speaking depends on voices your device has.
-- Android Chrome: has Google తెలుగు built in.
-- Windows: Edge has natural Telugu and Hindi voices. Or add them in Settings → Time & language → Speech → Add voices.
-- Mac: System Settings → Accessibility → Spoken Content → System voice → Manage voices → add Telugu and Hindi.
+**Voices:** the crew speaks with natural Microsoft neural voices (Telugu: Shruti and Mohan, Hindi: Swara and Madhur,
+English: Neerja and Prabhat), fetched free over the internet by the app. Each agent gets a male or female voice with
+its own speed and pitch. If those voices can't be reached, the app falls back to your browser's built-in voices.
 
 ## What it costs
 

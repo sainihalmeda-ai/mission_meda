@@ -13,7 +13,8 @@ if not exist ".venv\Scripts\python.exe" (
   echo First-time setup: installing Mission MEDA. This takes a minute or two...
   py -3 -m venv .venv
   ".venv\Scripts\python.exe" -m pip install --upgrade pip >nul
-  ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 )
+rem Installs anything new after an update; quick when nothing changed.
+".venv\Scripts\python.exe" -m pip install -q -r requirements.txt
 ".venv\Scripts\python.exe" run.py %*
 pause

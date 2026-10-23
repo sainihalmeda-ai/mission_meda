@@ -286,8 +286,40 @@ function speakable(text) {
   return text.replace(/```[\s\S]*?```/g, " (code on screen) ").replace(/[*_#>`]/g, "")
              .replace(/https?:\/\/\S+/g, "link on screen").replace(/\p{Extended_Pictographic}/gu, "");
 }
-function speak(agentKey, text) {
-  if (!state.speak || !("speechSynthesis" in window) || !text) return;
+// Natural voices come from the app's server; the browser's own voices are the backup.
+let player = null, speakSeq = 0;
+function stopSpeaking() {
+  speakSeq++;
+  if (player) { player.pause(); player = null; }
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  state.speaking = false; setTalking(null);
+}
+function doneSpeaking() {
+  state.speaking = false; setTalking(null);
+  if (state.handsfree && !state.busy) startListening();
+}
+async function speak(agentKey, text) {
+  if (!state.speak || !text) return;
+  stopSpeaking();
+  const seq = speakSeq;
+  try {
+    const res = await fetch("/api/speak", { method: "POST",
+      headers: { "content-type": "application/json", "x-meda-passcode": state.passcode },
+      body: JSON.stringify({ text, agent: agentKey }) });
+    if (res.status === 204) return;
+    if (!res.ok) throw new Error("no server voice");
+    const url = URL.createObjectURL(await res.blob());
+    if (seq !== speakSeq) return;  // something newer started talking
+    player = new Audio(url);
+    player.onplay = () => { state.speaking = true; setTalking(agentKey); };
+    player.onended = () => { URL.revokeObjectURL(url); doneSpeaking(); };
+    await player.play();
+  } catch (e) {
+    if (seq === speakSeq) speakBrowser(agentKey, text);
+  }
+}
+function speakBrowser(agentKey, text) {
+  if (!("speechSynthesis" in window)) return;
   const m = state.crew[agentKey] || { voice: {} };
   speechSynthesis.cancel();
   // Split into sentences so long replies don't get cut off by some browsers.
@@ -299,16 +331,13 @@ function speak(agentKey, text) {
     u.voice = pickVoice(u.lang, m.voice?.gender);
     u.pitch = m.voice?.pitch ?? 1; u.rate = m.voice?.rate ?? 1;
     if (i === 0) u.onstart = () => { state.speaking = true; setTalking(agentKey); };
-    if (i === parts.length - 1) u.onend = () => {
-      state.speaking = false; setTalking(null);
-      if (state.handsfree && !state.busy) startListening();
-    };
+    if (i === parts.length - 1) u.onend = doneSpeaking;
     speechSynthesis.speak(u);
   });
 }
 $("speak").onclick = () => {
   state.speak = !state.speak; $("speak").classList.toggle("on", state.speak);
-  $("speak").textContent = state.speak ? "🔊" : "🔇"; if (!state.speak) speechSynthesis.cancel();
+  $("speak").textContent = state.speak ? "🔊" : "🔇"; if (!state.speak) stopSpeaking();
 };
 
 // ---------- listening (speech to text) ----------
@@ -317,7 +346,7 @@ let rec = null;
 function startListening() {
   if (!SR) { status("Voice input needs Chrome or Edge. You can still type."); return; }
   if (state.listening || state.busy) return;
-  speechSynthesis.cancel();
+  stopSpeaking();
   rec = new SR();
   rec.lang = $("lang").value; rec.interimResults = true; rec.continuous = false;
   let finalText = "";
