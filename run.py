@@ -5,7 +5,6 @@
 """
 
 import argparse
-import getpass
 import os
 import socket
 import sys
@@ -16,6 +15,36 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 
+def check_gemini_key(key: str, model: str) -> str | None:
+    """Return a problem description, or None if Google accepts the key."""
+    try:
+        from google import genai
+        from google.genai import errors
+    except ImportError:
+        return None  # packages not installed yet; the app will report problems later
+    try:
+        client = genai.Client(api_key=key)  # keep a reference; a temporary client closes itself
+        client.models.get(model=model or "gemini-3.5-flash-lite")
+        return None
+    except errors.ClientError as e:
+        if e.code == 404:
+            return None  # key works; the model name is handled inside the app
+        if "api key" in (e.message or "").lower() or e.code in (400, 401, 403):
+            return "Google says this key isn't valid."
+        return f"Google returned an error ({e.code}): {e.message}"
+    except Exception as e:
+        return f"Couldn't reach Google to check the key ({type(e).__name__}). Check your internet."
+
+
+def ask_key(provider: str) -> str:
+    if provider == "claude":
+        return input("  Paste your Claude API key and press Enter: ").strip()
+    print("  Get a free Gemini key: open https://aistudio.google.com/apikey, sign in with Google,")
+    print("  tap 'Create API key' and copy it.")
+    print("  To paste in this window: right-click, or press Ctrl+V.")
+    return input("  Paste the key here and press Enter: ").strip().strip('"').strip("'")
+
+
 def first_run_setup() -> None:
     """Ask for the API key, name and passcode the first time, and write them to .env."""
     env = ROOT / ".env"
@@ -23,26 +52,41 @@ def first_run_setup() -> None:
     values = dict(l.split("=", 1) for l in text.splitlines() if "=" in l and not l.lstrip().startswith("#"))
     provider = (os.environ.get("MEDA_PROVIDER") or values.get("MEDA_PROVIDER", "gemini")).strip().lower()
     key_var = "ANTHROPIC_API_KEY" if provider == "claude" else "GEMINI_API_KEY"
-    current = values.get(key_var, "").strip()
-    if (env.exists() and current and not current.endswith("...")) or os.environ.get(key_var):
+    if os.environ.get(key_var):
         return
-    print("\n  Welcome to Mission MEDA. A few quick questions, one time only.\n")
-    if provider == "claude":
-        key = getpass.getpass("  1. Paste your Claude API key (it stays hidden as you paste): ").strip()
+    current = values.get(key_var, "").strip()
+    updates: dict[str, str] = {}
+
+    if env.exists() and current and not current.endswith("..."):
+        problem = check_gemini_key(current, values.get("MEDA_MODEL", "").strip()) if provider == "gemini" else None
+        if not problem:
+            return
+        print(f"\n  {problem} Let's fix the key.\n")
     else:
-        print("  1. Get a free Gemini key: open https://aistudio.google.com/apikey, sign in with Google,")
-        print("     tap 'Create API key' and copy it.")
-        key = getpass.getpass("     Paste the key here (it stays hidden as you paste): ").strip()
-    name = input("  2. What should the crew call you? [Sai]: ").strip() or "Sai"
+        print("\n  Welcome to Mission MEDA. A few quick questions, one time only.\n")
+        print("  1. Your AI key")
+
     while True:
-        code = getpass.getpass("  3. Choose a passcode for the app (6+ characters): ").strip()
-        if len(code) >= 6:
+        key = ask_key(provider)
+        problem = check_gemini_key(key, values.get("MEDA_MODEL", "").strip()) if provider == "gemini" else None
+        if key and not problem:
+            print("     Key works!")
             break
-        print("     That's too short, try again.")
-    projects = input(f"  4. Folder with your projects for Lochu [{Path.home() / 'projects'}]: ").strip()
-    updates = {key_var: key, "MEDA_OWNER_NAME": name, "MEDA_PASSCODE": code}
-    if projects:
-        updates["MEDA_PROJECTS_DIR"] = projects
+        print(f"     {problem or 'The key was empty.'} Try again (copy the whole key, it starts with AI).\n")
+    updates[key_var] = key
+
+    if not (env.exists() and values.get("MEDA_PASSCODE", "").strip()):
+        updates["MEDA_OWNER_NAME"] = input("  2. What should the crew call you? [Sai]: ").strip() or "Sai"
+        while True:
+            code = input("  3. Choose a passcode for the app (6+ characters): ").strip()
+            if len(code) >= 6:
+                break
+            print("     That's too short, try again.")
+        updates["MEDA_PASSCODE"] = code
+        projects = input(f"  4. Folder with your projects for Lochu [{Path.home() / 'projects'}]: ").strip()
+        if projects:
+            updates["MEDA_PROJECTS_DIR"] = projects.strip('"')
+
     lines = []
     for line in text.splitlines():
         k = line.split("=", 1)[0] if "=" in line and not line.lstrip().startswith("#") else None
