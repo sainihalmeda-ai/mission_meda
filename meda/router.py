@@ -1,14 +1,13 @@
 """Decides which crew member hears each message.
 
 Say a name ("Indu, I can't sleep" / "లోచు, build fail అయింది") and that agent answers.
-Otherwise a quick Claude call picks the best fit, leaning toward whoever you were
+Otherwise a quick AI call picks the best fit, leaning toward whoever you were
 just talking to.
 """
 
-import json
 import re
 
-from . import agents, config, health
+from . import agents, health
 
 ROUTER_PROMPT = """You route messages to one of five assistants. Pick exactly one.
 sonu: academics, classes, exams, study plans, daily schedule, job or internship applications, resumes,
@@ -42,23 +41,15 @@ def by_name(text: str) -> str | None:
     return None
 
 
-def pick(client, text: str, last_agent: str | None) -> str:
+def pick(provider, text: str, last_agent: str | None) -> str:
     named = by_name(text)
     if named:
         return named
     try:
-        resp = client.messages.create(
-            model=config.MODEL,
-            max_tokens=2000,
-            system=ROUTER_PROMPT,
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
-            messages=[{"role": "user", "content": f"Previous assistant: {last_agent or 'none'}\nMessage: {text}"}],
-        )
-        health.book("jyothi", resp.usage.input_tokens, resp.usage.output_tokens)
-        if resp.stop_reason == "refusal":
-            return last_agent or "sonu"
-        raw = next(b.text for b in resp.content if b.type == "text")
-        choice = json.loads(raw)["agent"]
+        data, tin, tout = provider.classify(
+            ROUTER_PROMPT, f"Previous assistant: {last_agent or 'none'}\nMessage: {text}", SCHEMA)
+        health.book("jyothi", tin, tout)
+        choice = data.get("agent")
         return choice if choice in agents.CREW else (last_agent or "sonu")
     except Exception:
         return last_agent or "sonu"

@@ -16,6 +16,7 @@ class Agent:
     tool_defs: list = field(default_factory=list)
     effort: str = "low"
     voice: dict = field(default_factory=dict)  # used by the browser to pick a voice
+    web_search: bool = False  # lets the agent search the web through the AI provider
     aliases: tuple = ()
 
 
@@ -54,7 +55,8 @@ SONU = Agent(
     effort="medium",
     aliases=("sonu", "sonu anna", "సోను", "सोनू"),
     voice={"gender": "male", "pitch": 0.9, "rate": 1.0},
-    tool_defs=tools.SHARED + tools.SCHEDULE + tools.JOBS + [tools.WEB_SEARCH],
+    tool_defs=tools.SHARED + tools.SCHEDULE + tools.JOBS,
+    web_search=True,
     persona="""You are Sonu, {owner}'s elder brother (anna). You genuinely care, you're proud of {owner},
 and you hold them to their potential. Warm but firm: you'll say "anna cheptunna, first finish the assignment"
 when needed, and you celebrate wins loudly.
@@ -67,7 +69,7 @@ What you handle:
 - Pocket money through open source: suggest real, legitimate paths that fit {owner}'s skills, such as
   Google Summer of Code, LFX Mentorship, Outreachy, MLH Fellowship, bug bounty and issue bounty platforms,
   GitHub Sponsors, paid documentation or translation work (Telugu and Hindi are valuable), and freelance gigs
-  built on open-source tools. Use web_search for current deadlines and openings, and give a concrete first step.
+  built on open-source tools. Search the web for current deadlines and openings when you can, and give a concrete first step.
   Be honest about how much each path pays and how long it takes. Warn about scams that ask for fees.
 - Each morning-type request ("today plan enti?"): give the top 3 things for today, then the rest.""",
 )

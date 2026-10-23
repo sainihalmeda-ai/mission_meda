@@ -20,29 +20,34 @@ def first_run_setup() -> None:
     """Ask for the API key, name and passcode the first time, and write them to .env."""
     env = ROOT / ".env"
     text = env.read_text(encoding="utf-8") if env.exists() else (ROOT / ".env.example").read_text(encoding="utf-8")
-    current = next((l.split("=", 1)[1].strip() for l in text.splitlines() if l.startswith("ANTHROPIC_API_KEY=")), "")
-    if (env.exists() and current and current != "sk-ant-...") or os.environ.get("ANTHROPIC_API_KEY"):
+    values = dict(l.split("=", 1) for l in text.splitlines() if "=" in l and not l.lstrip().startswith("#"))
+    provider = (os.environ.get("MEDA_PROVIDER") or values.get("MEDA_PROVIDER", "gemini")).strip().lower()
+    key_var = "ANTHROPIC_API_KEY" if provider == "claude" else "GEMINI_API_KEY"
+    current = values.get(key_var, "").strip()
+    if (env.exists() and current and not current.endswith("...")) or os.environ.get(key_var):
         return
     print("\n  Welcome to Mission MEDA. A few quick questions, one time only.\n")
-    key = getpass.getpass("  1. Paste your Claude API key (it stays hidden as you paste): ").strip()
+    if provider == "claude":
+        key = getpass.getpass("  1. Paste your Claude API key (it stays hidden as you paste): ").strip()
+    else:
+        print("  1. Get a free Gemini key: open https://aistudio.google.com/apikey, sign in with Google,")
+        print("     tap 'Create API key' and copy it.")
+        key = getpass.getpass("     Paste the key here (it stays hidden as you paste): ").strip()
     name = input("  2. What should the crew call you? [Sai]: ").strip() or "Sai"
     while True:
         code = getpass.getpass("  3. Choose a passcode for the app (6+ characters): ").strip()
         if len(code) >= 6:
             break
         print("     That's too short, try again.")
-    projects = input(f"  Folder with your projects for Lochu [{Path.home() / 'projects'}]: ").strip()
+    projects = input(f"  4. Folder with your projects for Lochu [{Path.home() / 'projects'}]: ").strip()
+    updates = {key_var: key, "MEDA_OWNER_NAME": name, "MEDA_PASSCODE": code}
+    if projects:
+        updates["MEDA_PROJECTS_DIR"] = projects
     lines = []
     for line in text.splitlines():
-        if line.startswith("ANTHROPIC_API_KEY="):
-            line = f"ANTHROPIC_API_KEY={key}"
-        elif line.startswith("MEDA_OWNER_NAME="):
-            line = f"MEDA_OWNER_NAME={name}"
-        elif line.startswith("MEDA_PASSCODE="):
-            line = f"MEDA_PASSCODE={code}"
-        elif line.startswith("MEDA_PROJECTS_DIR=") and projects:
-            line = f"MEDA_PROJECTS_DIR={projects}"
-        lines.append(line)
+        k = line.split("=", 1)[0] if "=" in line and not line.lstrip().startswith("#") else None
+        lines.append(f"{k}={updates.pop(k)}" if k in updates else line)
+    lines += [f"{k}={v}" for k, v in updates.items()]
     env.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n  Saved. You can change these later in the .env file.\n")
 

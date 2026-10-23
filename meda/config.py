@@ -23,8 +23,13 @@ _load_dotenv(ROOT / ".env")
 # Your name, so the crew knows who they are looking after.
 OWNER_NAME = os.environ.get("MEDA_OWNER_NAME", "Sai")
 
-# The Claude model every agent uses. Opus 5.5 is the current default.
-MODEL = os.environ.get("MEDA_MODEL", "claude-opus-5-5")
+# Which AI brain to use: "gemini" (free tier, default) or "claude" (paid, smartest).
+PROVIDER = os.environ.get("MEDA_PROVIDER", "gemini").strip().lower()
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+
+# Model name. Leave empty for the default: gemini-3.5-flash-lite or claude-opus-5-5.
+MODEL = os.environ.get("MEDA_MODEL", "").strip()
 
 # Passcode the web app asks for. Lochu can run commands on your computer,
 # so never expose the app without one.
@@ -43,12 +48,15 @@ VAULT_PATH = Path(os.path.expanduser(os.environ.get("MEDA_VAULT", str(ROOT / "va
 # Jyothi's limits. Daily spend cap in US dollars, and per-agent tokens per hour
 # before that agent is sent to cool down.
 DAILY_BUDGET_USD = float(os.environ.get("MEDA_DAILY_BUDGET_USD", "2.00"))
+# Max model calls per day. Gemini's free tier allows a few hundred, so Jyothi stops a little before.
+DAILY_REQUEST_LIMIT = int(os.environ.get("MEDA_DAILY_REQUEST_LIMIT", "450" if PROVIDER == "gemini" else "100000"))
 AGENT_TOKENS_PER_HOUR = int(os.environ.get("MEDA_AGENT_TOKENS_PER_HOUR", "200000"))
 COOLDOWN_MINUTES = int(os.environ.get("MEDA_COOLDOWN_MINUTES", "10"))
 
 # Price per million tokens for the model above (input, output), used for the budget.
-PRICE_IN = float(os.environ.get("MEDA_PRICE_IN", "4.00"))
-PRICE_OUT = float(os.environ.get("MEDA_PRICE_OUT", "20.00"))
+# Gemini's free tier costs nothing; Claude Opus 5.5 is $4 in / $20 out.
+PRICE_IN = float(os.environ.get("MEDA_PRICE_IN", "0" if PROVIDER == "gemini" else "4.00"))
+PRICE_OUT = float(os.environ.get("MEDA_PRICE_OUT", "0" if PROVIDER == "gemini" else "20.00"))
 
 # A conversation room is restarted after this many messages; memory carries over.
 MAX_ROOM_MESSAGES = int(os.environ.get("MEDA_MAX_ROOM_MESSAGES", "80"))

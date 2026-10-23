@@ -88,9 +88,6 @@ JYOTHI = [
           "Shared memory is kept.", {"agent": {"type": "string", "enum": health.AGENT_NAMES}}, ["agent"]),
 ]
 
-# Web search runs on Anthropic's side; no code needed here.
-WEB_SEARCH = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5}
-
 # Tools that wait for Sai's tap before they run.
 NEEDS_APPROVAL = {"run_command", "start_process", "stop_process", "relaunch_process"}
 
@@ -210,7 +207,7 @@ def _execute(name: str, a: dict, agent: str):
         memory.clear_cooldown(a["agent"])
         return f"{a['agent'].title()} is awake."
     if name == "refresh_agent":
-        memory.clear_room(a["agent"])
+        memory.clear_room(f"{a['agent']}@{config.PROVIDER}")
         return f"{a['agent'].title()} has a fresh conversation room. Shared memory is kept."
 
     return f"ERROR: unknown tool {name}"

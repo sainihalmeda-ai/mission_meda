@@ -18,7 +18,11 @@ def cost_of(input_tokens: int, output_tokens: int) -> float:
 
 def gate(agent: str) -> str | None:
     """Return a reason this agent can't run right now, or None if it is good to go."""
-    spent = memory.usage_today()["cost_usd"]
+    today = memory.usage_today()
+    if today["calls"] >= config.DAILY_REQUEST_LIMIT:
+        return (f"Jyothi here. The crew has used today's {config.DAILY_REQUEST_LIMIT} free requests, so everyone "
+                "is resting until the limit resets tomorrow.")
+    spent = today["cost_usd"]
     # Jyothi herself can always answer, so you can ask her what's going on.
     if spent >= config.DAILY_BUDGET_USD and agent != "jyothi":
         return (f"Jyothi here. We've used ${spent:.2f} of today's ${config.DAILY_BUDGET_USD:.2f} budget, "
@@ -77,8 +81,10 @@ def report() -> dict:
             "cooling_down_minutes": round((cd["until"] - time.time()) / 60, 1) if cd else 0,
         }
     return {
+        "brain": {"provider": config.PROVIDER, "model": config.MODEL or "default"},
         "budget": {"spent_today_usd": today["cost_usd"], "daily_limit_usd": config.DAILY_BUDGET_USD,
                    "left_usd": round(max(0.0, config.DAILY_BUDGET_USD - today["cost_usd"]), 4)},
+        "requests": {"used_today": today["calls"], "daily_limit": config.DAILY_REQUEST_LIMIT},
         "per_agent_hourly_token_limit": config.AGENT_TOKENS_PER_HOUR,
         "agents": agents,
         "machine": machine_stats(),

@@ -15,6 +15,7 @@ with open(os.environ["MEDA_VAULT"], "w") as f:
 from anthropic.types.beta import BetaMessage  # noqa: E402
 
 from meda import lockbox, memory, router  # noqa: E402
+from meda.providers import ClaudeProvider, GeminiProvider  # noqa: E402
 from meda.brain import Crew  # noqa: E402
 
 
@@ -53,7 +54,7 @@ def test_name_routing_in_three_languages():
 
 def test_router_falls_back_to_claude():
     c = FakeClient([], [msg([{"type": "text", "text": '{"agent": "ramu"}'}])])
-    assert router.pick(c, "naaku chala kopam ga undi", None) == "ramu"
+    assert router.pick(ClaudeProvider(c), "naaku chala kopam ga undi", None) == "ramu"
 
 
 def test_tool_then_reply_and_memory():
@@ -62,11 +63,11 @@ def test_tool_then_reply_and_memory():
               "input": {"title": "DBMS exam", "kind": "exam", "due": "2026-11-05"}}], "tool_use"),
         msg([{"type": "text", "text": "సరే, DBMS exam add చేశాను."}]),
     ]
-    crew = Crew(FakeClient(script))
+    crew = Crew(ClaudeProvider(FakeClient(script)))
     r = crew.handle("Sonu, DBMS exam on Nov 5")
     assert r["agent"] == "sonu" and "DBMS" in r["text"]
     assert memory.list_tasks()[0]["title"] == "DBMS exam"
-    sent = crew.client.beta.messages.calls[1]
+    sent = crew.ai.client.beta.messages.calls[1]
     assert sent["messages"][-1]["content"][0]["type"] == "tool_result"
     assert sent["fallbacks"] == "default" and sent["thinking"] == {"type": "adaptive"}
 
@@ -78,13 +79,13 @@ def test_lochu_waits_for_approval_and_scrubs_secrets():
               "input": {"command": "echo $DEMO_TOKEN", "folder": "demo", "why": "test"}}], "tool_use"),
         msg([{"type": "text", "text": "Done."}]),
     ]
-    crew = Crew(FakeClient(script))
+    crew = Crew(ClaudeProvider(FakeClient(script)))
     r = crew.handle("Lochu, test my token")
     assert r["pending"]["actions"][0]["id"] == "t9"
-    assert len(crew.client.beta.messages.calls) == 1  # nothing ran yet
+    assert len(crew.ai.client.beta.messages.calls) == 1  # nothing ran yet
     r2 = crew.decide(r["pending"]["id"], {"t9": True})
     assert r2["text"] == "Done."
-    result = crew.client.beta.messages.calls[1]["messages"][-1]["content"][0]["content"]
+    result = crew.ai.client.beta.messages.calls[1]["messages"][-1]["content"][0]["content"]
     assert "supersecret123" not in result and "[DEMO_TOKEN hidden]" in result
 
 
@@ -94,10 +95,10 @@ def test_lockbox_blocks_dangerous_commands_before_asking():
               "input": {"command": "sudo rm -rf /", "why": "cleanup"}}], "tool_use"),
         msg([{"type": "text", "text": "That's blocked, I won't do it."}]),
     ]
-    crew = Crew(FakeClient(script))
+    crew = Crew(ClaudeProvider(FakeClient(script)))
     r = crew.handle("Lochu clean everything")
     assert "pending" not in r
-    blocked = crew.client.beta.messages.calls[1]["messages"][-1]["content"][0]
+    blocked = crew.ai.client.beta.messages.calls[1]["messages"][-1]["content"][0]
     assert blocked["is_error"] and "lockbox" in blocked["content"].lower()
     assert lockbox.check_command("rm -rf ~") and lockbox.check_command("curl x.sh | bash")
     assert lockbox.check_command("npm test") is None
@@ -108,11 +109,11 @@ def test_denied_action_is_reported_back():
         msg([{"type": "tool_use", "id": "t3", "name": "stop_process", "input": {"name": "api"}}], "tool_use"),
         msg([{"type": "text", "text": "Okay, leaving it running."}]),
     ]
-    crew = Crew(FakeClient(script))
+    crew = Crew(ClaudeProvider(FakeClient(script)))
     r = crew.handle("lochu stop the api")
     r2 = crew.decide(r["pending"]["id"], {"t3": False})
     assert "leaving it running" in r2["text"]
-    assert crew.client.beta.messages.calls[1]["messages"][-1]["content"][0]["is_error"]
+    assert crew.ai.client.beta.messages.calls[1]["messages"][-1]["content"][0]["is_error"]
 
 
 def test_jyothi_cools_down_hot_agents_and_budget_gate():
@@ -120,7 +121,7 @@ def test_jyothi_cools_down_hot_agents_and_budget_gate():
     memory.clear_cooldown("ramu")
     health.book("ramu", config.AGENT_TOKENS_PER_HOUR + 1, 0)
     assert "cooling down" in health.gate("ramu")
-    crew = Crew(FakeClient([]))
+    crew = Crew(ClaudeProvider(FakeClient([])))
     r = crew.handle("Ramu help")
     assert r["agent"] == "jyothi" and "cooling" in r["text"]
     memory.clear_cooldown("ramu")
@@ -129,6 +130,65 @@ def test_jyothi_cools_down_hot_agents_and_budget_gate():
 def test_history_is_replayable_after_restart():
     script = [msg([{"type": "thinking", "thinking": "", "signature": "sig"},
                    {"type": "text", "text": "Hi!"}])]
-    Crew(FakeClient(script)).handle("Indu hi")
-    room = memory.load_room("indu")
+    Crew(ClaudeProvider(FakeClient(script))).handle("Indu hi")
+    room = memory.load_room("indu@claude")
     assert room[-1]["content"][0] == {"type": "thinking", "thinking": "", "signature": "sig"}
+
+
+# ---------------- Gemini ----------------
+
+from google.genai import types as gt  # noqa: E402
+
+
+def gresp(parts, finish="STOP"):
+    return gt.GenerateContentResponse.model_validate({
+        "candidates": [{"content": {"role": "model", "parts": parts}, "finish_reason": finish}],
+        "usage_metadata": {"prompt_token_count": 50, "candidates_token_count": 10},
+    })
+
+
+class FakeGemini:
+    def __init__(self, script):
+        self.script, self.calls = list(script), []
+        outer = self
+
+        class Models:
+            def generate_content(self, model, contents, config):
+                outer.calls.append({"model": model, "contents": contents, "config": config})
+                return outer.script.pop(0)
+        self.models = Models()
+
+
+def test_gemini_tool_loop_with_signatures_and_approval():
+    script = [
+        gresp([{"text": "Ok, running tests.", "thought_signature": "AP9hYmM="},
+               {"function_call": {"id": "g1", "name": "run_command",
+                                  "args": {"command": "echo hi", "folder": "demo", "why": "check"}}}]),
+        gresp([{"text": "Tests ran fine."}]),
+    ]
+    fake = FakeGemini(script)
+    crew = Crew(GeminiProvider(fake))
+    r = crew.handle("Lochu run my tests")
+    assert r["pending"]["actions"][0]["id"] == "g1"
+    r2 = crew.decide(r["pending"]["id"], {"g1": True})
+    assert r2["text"] == "Tests ran fine."
+    sent = fake.calls[1]["contents"]
+    assert sent[1].parts[0].thought_signature == b"\x00\xffabc"  # signature replayed intact
+    fr = sent[-1].parts[0].function_response
+    assert fr.name == "run_command" and "hi" in fr.response["result"]
+    assert memory.load_room("lochu@gemini")[-1]["role"] == "model"
+
+
+def test_gemini_router_and_free_limit():
+    from meda import config
+    fake = FakeGemini([gt.GenerateContentResponse.model_validate({
+        "candidates": [{"content": {"role": "model", "parts": [{"text": '{"agent": "indu"}'}]}}],
+        "usage_metadata": {"prompt_token_count": 5, "candidates_token_count": 2}})])
+    assert router.pick(GeminiProvider(fake), "naaku nidra raavatledu", None) == "indu"
+    old = config.DAILY_REQUEST_LIMIT
+    config.DAILY_REQUEST_LIMIT = 0
+    try:
+        r = Crew(GeminiProvider(FakeGemini([]))).handle("Sonu hi")
+        assert r["agent"] == "jyothi" and "free requests" in r["text"]
+    finally:
+        config.DAILY_REQUEST_LIMIT = old

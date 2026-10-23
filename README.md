@@ -19,11 +19,11 @@ you (voice or text)
    │
    ▼
 Router ── says a name? ("Indu, …") → that agent
-   │      otherwise Claude picks the best fit
+   │      otherwise the AI picks the best fit
    ▼
 Jyothi's gate ── budget left? agent cooling down?
    ▼
-Agent (Claude Opus 5.5 + its own personality and tools)
+Agent (AI brain + its own personality and tools)
    │   ├── shared memory (facts, tasks, applications, moods)
    │   └── Lochu's tools ──► lockbox check ──► your Approve tap ──► runs
    ▼
@@ -34,8 +34,8 @@ Everything runs on your own computer. Memory is one file: `data/meda.sqlite3`.
 
 ## Setup (about 10 minutes, no coding)
 
-1. **Get a Claude API key.** Sign in at <https://platform.claude.com>, add a little credit (about $5 lasts a long time),
-   and create a key under **API keys**. Copy it.
+1. **Get a free Gemini key.** Open <https://aistudio.google.com/apikey>, sign in with your Google account,
+   tap **Create API key**, and copy it. No card needed.
 
 2. **Install Python** if you don't have it: <https://www.python.org/downloads/>.
    On Windows, tick **"Add python.exe to PATH"** on the first install screen.
@@ -46,7 +46,7 @@ Everything runs on your own computer. Memory is one file: `data/meda.sqlite3`.
    - Windows: `Start Mission MEDA (Windows).bat`
    - Mac: `Start Mission MEDA (Mac).command` (the first time, right-click it and choose **Open**)
 
-   The first run installs everything and asks a few questions: your API key, your name, a passcode, and your
+   The first run installs everything and asks a few questions: your Gemini key, your name, a passcode, and your
    projects folder. Then the app opens in your browser. Tap the 🎙️ mic, allow the microphone, and talk.
 
 Keep the black window open while you use the crew. Close it to switch them off.
@@ -80,9 +80,19 @@ Your laptop must stay on while you use it.
 
 ## What it costs
 
-Each message costs roughly 2 to 4 US cents with Claude Opus 5.5. Jyothi stops the crew when today's spend reaches
-`MEDA_DAILY_BUDGET_USD` (default $2.00) and cools down any agent that uses more than `MEDA_AGENT_TOKENS_PER_HOUR`
-in an hour. Ask "Jyothi, how is everyone?" any time.
+**Nothing, on the default setup.** The crew runs on Google's free Gemini tier (model `gemini-3.5-flash-lite`).
+Voice is free too, because it uses your browser.
+
+- The free tier has a daily limit (a few hundred requests). One message can use 1 to 3 requests when an agent
+  uses tools. Jyothi counts them and rests the crew at `MEDA_DAILY_REQUEST_LIMIT` (default 450) until the limit resets.
+- **Privacy:** Google may use free-tier chats to improve its products, and people may review them. Avoid sharing
+  passwords, bank details or anything you'd never want read. Lochu's vault values never reach the AI either way.
+- If Gemini says the model isn't found, open Google AI Studio, pick any free "Flash-Lite" or "Flash" model, and put
+  its name in `.env` as `MEDA_MODEL=`.
+
+**Want a smarter brain later?** Set `MEDA_PROVIDER=claude` and `ANTHROPIC_API_KEY=` in `.env`. Claude Opus 5.5 costs
+about 2 to 4 US cents per message, and Jyothi then caps spending at `MEDA_DAILY_BUDGET_USD` (default $2). Paid
+Claude API chats aren't used to train models by default.
 
 ## Safety
 
@@ -100,6 +110,7 @@ in an hour. Ask "Jyothi, how is everyone?" any time.
 | `meda/agents.py` | Each agent's personality, tools and voice. Edit this to change how they behave. |
 | `meda/router.py` | Picks which agent answers. |
 | `meda/brain.py` | The Mindspace loop: gate, agent, tools, approvals. |
+| `meda/providers.py` | The AI brains (Gemini and Claude) behind one simple interface. |
 | `meda/health.py` | Jyothi's budget, cooldowns and machine stats. |
 | `meda/tools.py` | Every tool the agents can use. |
 | `meda/lockbox.py` | The hard safety rules and the credential vault. |
