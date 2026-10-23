@@ -38,6 +38,7 @@ def _reply(messages: list[dict], pending=None) -> dict:
 class Crew:
     def __init__(self, provider=None):
         self.ai = provider or providers.make()
+        health.active_provider = self.ai
         self.last_agent: str | None = None
         self.pending: dict[str, dict] = {}
         self.locks = {k: threading.RLock() for k in agents.CREW}
@@ -123,6 +124,7 @@ class Crew:
         shown: list[dict] = []
         spoken: list[str] = []
         actions: list[dict] = []
+        consulted = False  # one consult per turn keeps the free daily requests going further
 
         def finish(pending=None):
             if consult_depth == 0:
@@ -159,7 +161,12 @@ class Crew:
             results, waiting = [], []
             for call in turn.calls:
                 name, args = call["name"], call["input"]
+                if name == "ask_crewmate" and consulted:
+                    results.append({"id": call["id"], "name": name, "is_error": True,
+                                    "output": "You already consulted a crewmate this turn. Answer with what you have."})
+                    continue
                 if name == "ask_crewmate":
+                    consulted = True
                     answer = self._consult(key, args.get("agent", ""), args.get("question", ""))
                     if answer["agent"] != "jyothi" or answer["text"]:
                         shown.append(answer)

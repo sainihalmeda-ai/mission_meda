@@ -420,7 +420,8 @@ async function refreshSide() {
     $("budget").innerHTML = kv("Brain", free ? "Gemini (free)" : "Claude") +
       (free ? kv("Free requests today", `${h.requests.used_today} of ${h.requests.daily_limit}`)
             : kv("Spent today", `$${h.budget.spent_today_usd.toFixed(2)} of $${h.budget.daily_limit_usd.toFixed(2)}`)) +
-      `<div class="meter"><i style="width:${pct2}%;background:${pct2 > 85 ? "var(--bad)" : "var(--ok)"}"></i></div>`;
+      `<div class="meter"><i style="width:${pct2}%;background:${pct2 > 85 ? "var(--bad)" : "var(--ok)"}"></i></div>` +
+      (h.brain.in_rotation || []).map((m) => kv("🧠 " + esc(m), h.brain.resting?.[m] != null ? `resting ${h.brain.resting[m]}m` : "ready")).join("");
     $("agents").innerHTML = Object.entries(h.agents).map(([k, a]) =>
       kv(`${state.crew[k]?.emoji || ""} ${state.crew[k]?.name || k}`, a.cooling_down_minutes ? `cooling ${a.cooling_down_minutes}m` : `${a.today.calls} calls`)).join("");
     document.querySelectorAll(".member").forEach((el) => el.classList.toggle("cool", !!h.agents[el.dataset.key]?.cooling_down_minutes));

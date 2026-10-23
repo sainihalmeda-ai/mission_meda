@@ -89,8 +89,11 @@ your browser's own voices.
 **Nothing, on the default setup.** The crew runs on Google's free Gemini tier (model `gemini-3.5-flash-lite`).
 Voice is free too, because it uses your browser.
 
-- The free tier has a daily limit (a few hundred requests). One message can use 1 to 3 requests when an agent
-  uses tools. Jyothi counts them and rests the crew at `MEDA_DAILY_REQUEST_LIMIT` (default 450) until the limit resets.
+- Google's free tier has small per-model limits (for some models only about 20 requests a day). Mission MEDA spreads
+  the load: when one free model is used up, it switches to the next free Gemini model on its own (Jyothi's Board shows
+  which are ready and which are resting). Most messages use just one request, because keywords pick the agent for free
+  and each agent consults a crewmate at most once per message.
+- Jyothi also stops the crew at `MEDA_DAILY_REQUEST_LIMIT` (default 1500) as a safety cap.
 - **Privacy:** Google may use free-tier chats to improve its products, and people may review them. Avoid sharing
   passwords, bank details or anything you'd never want read. Lochu's vault values never reach the AI either way.
 - If Gemini says the model isn't found, open Google AI Studio, pick any free "Flash-Lite" or "Flash" model, and put

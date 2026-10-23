@@ -54,7 +54,7 @@ def test_name_routing_in_three_languages():
 
 def test_router_falls_back_to_claude():
     c = FakeClient([], [msg([{"type": "text", "text": '{"agent": "ramu"}'}])])
-    assert router.pick(ClaudeProvider(c), "naaku chala kopam ga undi", None) == "ramu"
+    assert router.pick(ClaudeProvider(c), "my exam made me so stressed", None) == "ramu"  # a tie, so the AI decides
 
 
 def test_tool_then_reply_and_memory():
@@ -184,7 +184,7 @@ def test_gemini_router_and_free_limit():
     fake = FakeGemini([gt.GenerateContentResponse.model_validate({
         "candidates": [{"content": {"role": "model", "parts": [{"text": '{"agent": "indu"}'}]}}],
         "usage_metadata": {"prompt_token_count": 5, "candidates_token_count": 2}})])
-    assert router.pick(GeminiProvider(fake), "naaku nidra raavatledu", None) == "indu"
+    assert router.pick(GeminiProvider(fake), "my exam made me so stressed", None) == "indu"
     old = config.DAILY_REQUEST_LIMIT
     config.DAILY_REQUEST_LIMIT = 0
     try:
@@ -245,12 +245,57 @@ def test_agents_consult_each_other():
 
 
 def test_huddle_gets_several_voices():
-    group = gt.GenerateContentResponse.model_validate({
-        "candidates": [{"content": {"role": "model", "parts": [{"text": '{"agents": ["ramu", "indu"]}'}]}}],
-        "usage_metadata": {"prompt_token_count": 5, "candidates_token_count": 2}})
-    fake = FakeGemini([group, gresp([{"text": "Breathe. Don't text him back yet."}]),
+    fake = FakeGemini([gresp([{"text": "Breathe. Don't text him back yet."}]),
                        gresp([{"text": "Ramu is right. Let's drink some water first."}])])
     r = Crew(GeminiProvider(fake)).handle("అందరూ, naaku chala kopam ga undi")
     assert [m["agent"] for m in r["messages"]] == ["ramu", "indu"]
-    second_prompt = " ".join(p.text for p in fake.calls[2]["contents"][-1].parts)
+    second_prompt = " ".join(p.text for p in fake.calls[1]["contents"][-1].parts)
     assert "Ramu: Breathe" in second_prompt
+
+
+def test_keywords_route_without_spending_a_request():
+    assert router.by_keywords("server crash ayindi, error vastundi") == "lochu"
+    assert router.by_keywords("నాకు నిద్ర రావట్లేదు") == "indu"
+    assert router.by_keywords("my exam is tomorrow, help me plan") == "sonu"
+    assert router.by_keywords("what is this program") is None  # "ram" inside "program" doesn't count
+    fake = FakeGemini([])  # any AI call would fail: the script is empty
+    p = GeminiProvider(fake)
+    assert router.pick(p, "battery and cpu are hot", None) == "jyothi"
+    assert router.pick(p, "ok thanks", "indu") == "indu"
+    assert router.pick(p, "hello there", None) == "sonu"
+    assert fake.calls == []
+
+
+def test_gemini_switches_free_models_when_one_runs_out():
+    from google.genai import errors
+
+    limit = errors.ClientError(429, {"error": {"code": 429, "message": "Quota exceeded", "status": "RESOURCE_EXHAUSTED",
+                                               "details": [{"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                                                            "violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}]}})
+    fake = FakeGemini([limit, gresp([{"text": "Hi from the backup model."}])])
+    outer = fake
+
+    def generate_content(model, contents, config):
+        outer.calls.append({"model": model})
+        item = outer.script.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+    fake.models.generate_content = generate_content
+    fake.models.list = lambda: [gt.Model(name="models/gemini-9-flash", supported_actions=["generateContent"]),
+                                gt.Model(name="models/gemini-9-flash-tts", supported_actions=["generateContent"])]
+    p = GeminiProvider(fake)
+    r = Crew(p).handle("Sonu hi")
+    assert r["text"] == "Hi from the backup model."
+    assert [c["model"] for c in fake.calls] == ["gemini-3.5-flash-lite", "gemini-9-flash"]
+    assert p.status()["in_rotation"] == ["gemini-3.5-flash-lite", "gemini-9-flash"]
+    assert "gemini-3.5-flash-lite" in p.status()["resting"]
+
+
+def test_only_one_consult_per_turn():
+    ask = lambda i, who: {"function_call": {"id": f"c{i}", "name": "ask_crewmate", "args": {"agent": who, "question": "?"}}}
+    fake = FakeGemini([gresp([ask(1, "indu"), ask(2, "ramu")]), gresp([{"text": "Sleep well."}]),
+                       gresp([{"text": "Done."}])])
+    r = Crew(GeminiProvider(fake)).handle("Sonu, exam week plan cheyyi")
+    assert [m["agent"] for m in r["messages"]] == ["indu", "sonu"]
+    assert len(fake.calls) == 3

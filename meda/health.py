@@ -70,7 +70,11 @@ def machine_stats() -> dict:
     return stats
 
 
-def report() -> dict:
+active_provider = None  # set by the crew so Jyothi can show which free models are resting
+
+
+def report(provider=None) -> dict:
+    provider = provider or active_provider
     today = memory.usage_today()
     agents = {}
     for name in AGENT_NAMES:
@@ -81,7 +85,8 @@ def report() -> dict:
             "cooling_down_minutes": round((cd["until"] - time.time()) / 60, 1) if cd else 0,
         }
     return {
-        "brain": {"provider": config.PROVIDER, "model": config.MODEL or "default"},
+        "brain": {"provider": config.PROVIDER, "model": config.MODEL or "default",
+                  **(provider.status() if provider is not None and hasattr(provider, "status") else {})},
         "budget": {"spent_today_usd": today["cost_usd"], "daily_limit_usd": config.DAILY_BUDGET_USD,
                    "left_usd": round(max(0.0, config.DAILY_BUDGET_USD - today["cost_usd"]), 4)},
         "requests": {"used_today": today["calls"], "daily_limit": config.DAILY_REQUEST_LIMIT},

@@ -49,7 +49,7 @@ VAULT_PATH = Path(os.path.expanduser(os.environ.get("MEDA_VAULT", str(ROOT / "va
 # before that agent is sent to cool down.
 DAILY_BUDGET_USD = float(os.environ.get("MEDA_DAILY_BUDGET_USD", "2.00"))
 # Max model calls per day. Gemini's free tier allows a few hundred, so Jyothi stops a little before.
-DAILY_REQUEST_LIMIT = int(os.environ.get("MEDA_DAILY_REQUEST_LIMIT", "450" if PROVIDER == "gemini" else "100000"))
+DAILY_REQUEST_LIMIT = int(os.environ.get("MEDA_DAILY_REQUEST_LIMIT", "1500" if PROVIDER == "gemini" else "100000"))
 AGENT_TOKENS_PER_HOUR = int(os.environ.get("MEDA_AGENT_TOKENS_PER_HOUR", "200000"))
 COOLDOWN_MINUTES = int(os.environ.get("MEDA_COOLDOWN_MINUTES", "10"))
 
