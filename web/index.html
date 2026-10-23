@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Mission MEDA</title>
+<style>
+  :root {
+    --bg: #0b1020; --panel: #121a30; --panel2: #182241; --line: #26314f;
+    --text: #e7ecf7; --muted: #95a0bd; --accent: #8b5cf6; --ok: #22c55e; --bad: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans Telugu", "Noto Sans Devanagari", sans-serif; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .app { display: grid; grid-template-columns: 1fr 320px; height: 100dvh; }
+  @media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); } .side { display: none; } .side.open { display: block; position: fixed; inset: 0; z-index: 20; } }
+
+  header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: .5px; }
+  header .sp { flex: 1; }
+  .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+  .chip.on { border-color: var(--accent); background: #8b5cf622; }
+  select.chip { appearance: none; }
+
+  .main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  @media (max-width: 520px) {
+    header { gap: 6px; padding: 10px 12px; } header h1 { font-size: 14px; }
+    .chip { padding: 5px 9px; font-size: 13px; }
+    .crew { padding: 8px 12px; } .member { width: 60px; } .member .face { width: 46px; height: 46px; font-size: 22px; }
+  }
+  .crew { display: flex; gap: 8px; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  .member { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 74px;
+    background: none; border: 0; padding: 4px; border-radius: 12px; }
+  .member .face { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 26px;
+    background: var(--panel2); border: 2px solid transparent; transition: transform .2s, box-shadow .2s; }
+  .member.sel .face { border-color: var(--c); }
+  .member.talking .face { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 40%, transparent); transform: scale(1.06); }
+  .member.cool .face { opacity: .45; }
+  .member span { font-size: 12px; color: var(--muted); }
+  .member.sel span { color: var(--text); }
+
+  .log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: min(680px, 88%); padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.me { align-self: flex-end; background: #2b3a67; border-bottom-right-radius: 4px; }
+  .msg.ai { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--c); border-bottom-left-radius: 4px; }
+  .msg .who { font-size: 12px; font-weight: 600; color: var(--c); margin-bottom: 2px; }
+  .msg pre { background: #0007; padding: 8px 10px; border-radius: 8px; overflow-x: auto; white-space: pre; font-size: 13px; }
+  .msg .acts { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .welcome { color: var(--muted); text-align: center; margin: auto; max-width: 440px; }
+
+  .approve { align-self: flex-start; max-width: min(680px, 92%); background: #2a1f0a; border: 1px solid #f59e0b88; border-radius: 14px; padding: 12px 14px; }
+  .approve h3 { margin: 0 0 6px; font-size: 14px; color: #fbbf24; }
+  .approve .act { background: #0005; border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+  .approve code { white-space: pre-wrap; font-size: 13px; }
+  .approve .why { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .approve .row { display: flex; gap: 8px; margin-top: 8px; }
+  .btn { border: 0; border-radius: 10px; padding: 8px 14px; font-weight: 600; }
+  .btn.yes { background: var(--ok); color: #04130a; } .btn.no { background: #3a2230; color: #fecaca; }
+  .btn.chosen { outline: 2px solid #fff; }
+
+  .bar { display: flex; gap: 8px; align-items: center; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--bg); }
+  .bar input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 12px 16px; font: inherit; }
+  .mic { width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--accent); font-size: 24px; flex: 0 0 auto; }
+  .mic.live { background: var(--bad); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 10px #ef444433; } }
+  .send { border: 0; background: var(--panel2); border-radius: 999px; padding: 12px 16px; }
+  .status { font-size: 12px; color: var(--muted); padding: 0 16px 4px; min-height: 18px; }
+
+  .side { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 16px; }
+  .side h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 18px 0 8px; }
+  .side h2:first-child { margin-top: 0; }
+  .meter { height: 8px; background: var(--line); border-radius: 8px; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--ok); }
+  .kv { display: flex; justify-content: space-between; font-size: 14px; padding: 3px 0; }
+  .kv span:last-child { color: var(--muted); }
+  .item { font-size: 14px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .item small { color: var(--muted); }
+  .closeside { display: none; }
+  @media (max-width: 860px) { .closeside { display: inline-block; float: right; } }
+
+  .gate { position: fixed; inset: 0; background: var(--bg); display: grid; place-items: center; z-index: 50; }
+  .gate form { display: flex; flex-direction: column; gap: 10px; width: min(320px, 90vw); text-align: center; }
+  .gate input { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 12px; padding: 12px; font: inherit; text-align: center; }
+</style>
+</head>
+<body>
+<div class="gate" id="gate" hidden>
+  <form id="gateForm">
+    <div style="font-size:40px">🔐</div>
+    <div>Mission MEDA is locked</div>
+    <input id="pass" type="password" placeholder="Passcode" autocomplete="current-password">
+    <button class="btn yes" type="submit">Unlock</button>
+    <div id="gateErr" style="color:#fca5a5;font-size:14px"></div>
+  </form>
+</div>
+
+<div class="app">
+  <div class="main">
+    <header>
+      <h1>MISSION MEDA</h1>
+      <div class="sp"></div>
+      <select class="chip" id="lang" title="Language I listen in">
+        <option value="te-IN">తెలుగు</option>
+        <option value="en-IN">English</option>
+        <option value="hi-IN">हिंदी</option>
+      </select>
+      <button class="chip" id="handsfree" title="Keep listening between replies">Hands‑free</button>
+      <button class="chip on" id="speak" title="Read replies aloud">🔊</button>
+      <button class="chip" id="openside">Board</button>
+    </header>
+    <div class="crew" id="crew"></div>
+    <div class="log" id="log">
+      <div class="welcome" id="welcome">
+        Tap the mic and talk. Say a name to call someone, like
+        <b>"Sonu, ee roju plan enti?"</b> or <b>"Indu, I'm stressed"</b>.
+        Or just talk, and the right one will answer.
+      </div>
+    </div>
+    <div class="status" id="status"></div>
+    <form class="bar" id="bar">
+      <button type="button" class="mic" id="mic" aria-label="Talk">🎙️</button>
+      <input id="text" placeholder="Type or tap the mic…" autocomplete="off">
+      <button class="send" type="submit">Send</button>
+    </form>
+  </div>
+
+  <aside class="side" id="side">
+    <button class="chip closeside" id="closeside">Close</button>
+    <h2>Jyothi · crew health</h2>
+    <div id="budget"></div>
+    <div id="agents"></div>
+    <div id="machine"></div>
+    <h2>Sonu · today's list</h2>
+    <div id="tasks"></div>
+    <h2>Applications</h2>
+    <div id="apps"></div>
+    <h2>Indu · mood</h2>
+    <div id="moods"></div>
+  </aside>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const state = { crew: {}, selected: null, passcode: "", speaking: false, listening: false,
+                handsfree: false, speak: true, busy: false };
+try { state.passcode = localStorage.getItem("meda-pass") || ""; } catch {}
+try { $("lang").value = localStorage.getItem("meda-lang") || "te-IN"; } catch {}
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body ? "POST" : "GET",
+    headers: { "content-type": "application/json", "x-meda-passcode": state.passcode },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) { showGate(); throw new Error("locked"); }
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+  return res.json();
+}
+
+// ---------- passcode ----------
+function showGate() { $("gate").hidden = false; $("pass").focus(); }
+$("gateForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await (await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ passcode: $("pass").value }) })).json();
+  if (!r.ok) { $("gateErr").textContent = "Wrong passcode"; return; }
+  state.passcode = $("pass").value;
+  try { localStorage.setItem("meda-pass", state.passcode); } catch {}
+  $("gate").hidden = true; boot();
+};
+
+// ---------- crew bar ----------
+function drawCrew(list) {
+  const bar = $("crew"); bar.innerHTML = "";
+  const auto = { key: null, name: "Auto", emoji: "✨", color: "#8b5cf6" };
+  for (const m of [auto, ...list]) {
+    const b = document.createElement("button");
+    b.className = "member" + (state.selected === m.key ? " sel" : "");
+    b.style.setProperty("--c", m.color);
+    b.dataset.key = m.key || "";
+    b.title = m.title || "Let the crew decide who answers";
+    b.innerHTML = `<div class="face">${m.emoji}</div><span>${m.name}</span>`;
+    b.onclick = () => { state.selected = m.key; drawCrew(list); };
+    bar.appendChild(b);
+  }
+}
+function setTalking(key) {
+  document.querySelectorAll(".member").forEach((el) => el.classList.toggle("talking", !!key && el.dataset.key === key));
+}
+
+// ---------- chat log ----------
+function esc(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+function render(text) {
+  // fenced code blocks shown, everything else plain
+  return esc(text).replace(/```[\w-]*\n?([\s\S]*?)```/g, (_, code) => `<pre>${code}</pre>`)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+}
+function addMsg(who, text, extra = {}) {
+  $("welcome")?.remove();
+  const div = document.createElement("div");
+  if (who === "me") { div.className = "msg me"; div.textContent = text; }
+  else {
+    const m = state.crew[who] || { name: who, color: "#888" };
+    div.className = "msg ai"; div.style.setProperty("--c", m.color);
+    div.innerHTML = `<div class="who">${m.emoji || ""} ${m.name}</div>${render(text || "…")}`;
+    if (extra.actions?.length) {
+      const a = document.createElement("div"); a.className = "acts";
+      a.textContent = "Used: " + [...new Set(extra.actions.map((x) => x.summary))].join(", ");
+      div.appendChild(a);
+    }
+  }
+  $("log").appendChild(div); $("log").scrollTop = $("log").scrollHeight;
+}
+function addApproval(p, quiet) {
+  const m = state.crew[p.agent];
+  $("welcome")?.remove();
+  const card = document.createElement("div"); card.className = "approve";
+  card.innerHTML = `<h3>🔒 ${m.name} needs your OK</h3>`;
+  const decisions = {};
+  for (const a of p.actions) {
+    const box = document.createElement("div"); box.className = "act";
+    box.innerHTML = `<code>${esc(a.description)}</code>${a.why ? `<div class="why">Why: ${esc(a.why)}</div>` : ""}
+      <div class="row"><button class="btn yes">Approve</button><button class="btn no">Deny</button></div>`;
+    const [yes, no] = box.querySelectorAll("button");
+    yes.onclick = () => { decisions[a.id] = true; yes.classList.add("chosen"); no.classList.remove("chosen"); maybeSend(); };
+    no.onclick = () => { decisions[a.id] = false; no.classList.add("chosen"); yes.classList.remove("chosen"); maybeSend(); };
+    card.appendChild(box);
+  }
+  let sent = false;
+  async function maybeSend() {
+    if (sent || Object.keys(decisions).length < p.actions.length) return;
+    sent = true; card.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    await respond(api("/api/decide", { approval_id: p.id, decisions }));
+  }
+  $("log").appendChild(card); $("log").scrollTop = $("log").scrollHeight;
+  if (!quiet) speak(p.agent, "I need your approval on screen before I run this.");
+}
+
+async function respond(promise) {
+  state.busy = true; status("Thinking…"); stopListening();
+  try {
+    const r = await promise;
+    if (r.text) { addMsg(r.agent, r.text, r); speak(r.agent, r.text); }
+    if (r.pending) addApproval(r.pending, !!r.text);
+    if (!r.text && !r.pending) addMsg(r.agent, "(done)");
+  } catch (e) {
+    if (e.message !== "locked") addMsg("jyothi", "Something went wrong: " + e.message);
+  } finally {
+    state.busy = false; status(""); refreshSide();
+    if (state.handsfree && !state.speaking) startListening();
+  }
+}
+async function send(text) {
+  text = text.trim(); if (!text || state.busy) return;
+  addMsg("me", text); $("text").value = "";
+  await respond(api("/api/chat", { text, agent: state.selected }));
+}
+$("bar").onsubmit = (e) => { e.preventDefault(); send($("text").value); };
+function status(s) { $("status").textContent = s; }
+
+// ---------- speaking (text to speech) ----------
+let voices = [];
+function loadVoices() { voices = speechSynthesis.getVoices(); }
+if ("speechSynthesis" in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+
+function langOf(text) {
+  if (/[ఀ-౿]/.test(text)) return "te-IN";
+  if (/[ऀ-ॿ]/.test(text)) return "hi-IN";
+  return "en-IN";
+}
+const FEMALE = /female|woman|heera|kalpana|swara|shruti|lekha|neerja|veena|zira|samantha|google.*(हिन्दी|తెలుగు)/i;
+const MALE = /male|man|hemant|mohan|madhur|prabhat|ravi|rishi|david|mark/i;
+function pickVoice(lang, gender) {
+  const base = lang.split("-")[0];
+  let pool = voices.filter((v) => v.lang.replace("_", "-") === lang);
+  if (!pool.length) pool = voices.filter((v) => v.lang.toLowerCase().startsWith(base));
+  if (!pool.length && lang !== "en-IN") return pickVoice("en-IN", gender);
+  if (!pool.length) pool = voices.filter((v) => v.lang.startsWith("en"));
+  const want = gender === "female" ? FEMALE : MALE;
+  return pool.find((v) => want.test(v.name)) || pool[0] || null;
+}
+function speakable(text) {
+  return text.replace(/```[\s\S]*?```/g, " (code on screen) ").replace(/[*_#>`]/g, "")
+             .replace(/https?:\/\/\S+/g, "link on screen").replace(/\p{Extended_Pictographic}/gu, "");
+}
+function speak(agentKey, text) {
+  if (!state.speak || !("speechSynthesis" in window) || !text) return;
+  const m = state.crew[agentKey] || { voice: {} };
+  speechSynthesis.cancel();
+  // Split into sentences so long replies don't get cut off by some browsers.
+  const parts = speakable(text).match(/[^.!?।\n]+[.!?।]?/g) || [];
+  parts.forEach((part, i) => {
+    if (!part.trim()) return;
+    const u = new SpeechSynthesisUtterance(part.trim());
+    u.lang = langOf(part);
+    u.voice = pickVoice(u.lang, m.voice?.gender);
+    u.pitch = m.voice?.pitch ?? 1; u.rate = m.voice?.rate ?? 1;
+    if (i === 0) u.onstart = () => { state.speaking = true; setTalking(agentKey); };
+    if (i === parts.length - 1) u.onend = () => {
+      state.speaking = false; setTalking(null);
+      if (state.handsfree && !state.busy) startListening();
+    };
+    speechSynthesis.speak(u);
+  });
+}
+$("speak").onclick = () => {
+  state.speak = !state.speak; $("speak").classList.toggle("on", state.speak);
+  $("speak").textContent = state.speak ? "🔊" : "🔇"; if (!state.speak) speechSynthesis.cancel();
+};
+
+// ---------- listening (speech to text) ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+function startListening() {
+  if (!SR) { status("Voice input needs Chrome or Edge. You can still type."); return; }
+  if (state.listening || state.busy) return;
+  speechSynthesis.cancel();
+  rec = new SR();
+  rec.lang = $("lang").value; rec.interimResults = true; rec.continuous = false;
+  let finalText = "";
+  rec.onresult = (e) => {
+    let interim = "";
+    for (const r of e.results) (r.isFinal ? (finalText = r[0].transcript) : (interim += r[0].transcript));
+    status("🎧 " + (finalText || interim));
+  };
+  rec.onerror = (e) => { if (e.error === "not-allowed") status("Microphone blocked. Allow it in the browser (needs https or localhost)."); };
+  rec.onend = () => {
+    state.listening = false; $("mic").classList.remove("live");
+    if (finalText) send(finalText);
+    else { status(""); if (state.handsfree && !state.busy && !state.speaking) setTimeout(startListening, 300); }
+  };
+  state.listening = true; $("mic").classList.add("live"); status("🎧 Listening…");
+  rec.start();
+}
+function stopListening() { if (rec && state.listening) { rec.onend = () => { state.listening = false; $("mic").classList.remove("live"); }; rec.stop(); } }
+$("mic").onclick = () => (state.listening ? stopListening() : startListening());
+$("handsfree").onclick = () => {
+  state.handsfree = !state.handsfree; $("handsfree").classList.toggle("on", state.handsfree);
+  state.handsfree ? startListening() : stopListening();
+};
+$("lang").onchange = () => { try { localStorage.setItem("meda-lang", $("lang").value); } catch {} };
+
+// ---------- side board ----------
+$("openside").onclick = () => { $("side").classList.add("open"); refreshSide(); };
+$("closeside").onclick = () => $("side").classList.remove("open");
+const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
+async function refreshSide() {
+  try {
+    const [h, b] = await Promise.all([api("/api/health"), api("/api/board")]);
+    const pct = Math.min(100, (h.budget.spent_today_usd / h.budget.daily_limit_usd) * 100);
+    $("budget").innerHTML = kv("Spent today", `$${h.budget.spent_today_usd.toFixed(2)} of $${h.budget.daily_limit_usd.toFixed(2)}`) +
+      `<div class="meter"><i style="width:${pct}%;background:${pct > 85 ? "var(--bad)" : "var(--ok)"}"></i></div>`;
+    $("agents").innerHTML = Object.entries(h.agents).map(([k, a]) =>
+      kv(`${state.crew[k]?.emoji || ""} ${state.crew[k]?.name || k}`, a.cooling_down_minutes ? `cooling ${a.cooling_down_minutes}m` : `${a.today.calls} calls`)).join("");
+    document.querySelectorAll(".member").forEach((el) => el.classList.toggle("cool", !!h.agents[el.dataset.key]?.cooling_down_minutes));
+    const m = h.machine || {};
+    $("machine").innerHTML = (m.cpu_percent != null ? kv("CPU", m.cpu_percent + "%") + kv("Memory", m.memory_percent + "%") + kv("Disk", m.disk_percent + "%") : "") +
+      (m.battery_percent != null ? kv("Battery", m.battery_percent + "%" + (m.plugged_in ? " ⚡" : "")) : "") +
+      (m.hottest_sensor_c != null ? kv("Hottest sensor", m.hottest_sensor_c + "°C") : "") +
+      (h.background_processes?.length ? h.background_processes.map((p) => kv("⚙️ " + p.name, p.running ? "running" : "stopped")).join("") : "");
+    $("tasks").innerHTML = b.tasks.length ? b.tasks.slice(0, 12).map((t) => `<div class="item">${esc(t.title)}<br><small>${t.kind}${t.due ? " · " + esc(t.due) : ""}</small></div>`).join("") : `<div class="item"><small>Nothing yet. Tell Sonu your timetable.</small></div>`;
+    $("apps").innerHTML = b.applications.length ? b.applications.map((a) => `<div class="item">${esc(a.company)} ${a.role ? "· " + esc(a.role) : ""}<br><small>${a.status}</small></div>`).join("") : `<div class="item"><small>No applications tracked yet.</small></div>`;
+    $("moods").innerHTML = b.moods.length ? b.moods.map((x) => `<div class="item">${esc(x.mood)}${x.score ? " · " + x.score + "/10" : ""}<br><small>${x.created}</small></div>`).join("") : `<div class="item"><small>No check-ins yet.</small></div>`;
+  } catch {}
+}
+
+// ---------- start ----------
+async function boot() {
+  try {
+    const info = await api("/api/crew");
+    info.crew.forEach((m) => (state.crew[m.key] = m));
+    drawCrew(info.crew);
+    (info.pending || []).forEach((p) => addApproval(p, true));
+    refreshSide(); setInterval(refreshSide, 30000);
+  } catch {}
+}
+boot();
+</script>
+</body>
+</html>
