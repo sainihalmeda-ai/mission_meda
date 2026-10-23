@@ -20,23 +20,33 @@ I = {"type": "integer"}
 # ---------- tool definitions ----------
 
 SHARED = [
-    _tool("remember_fact", "Save something worth remembering about Sai for the whole crew: goals, preferences, "
-          "people, exam dates, health notes, project details. Use whenever Sai shares something lasting.",
+    _tool("remember_fact", "Save something worth remembering about the user for the whole crew: goals, preferences, "
+          "people, exam dates, health notes, project details. Use whenever the user shares something lasting.",
           {"text": S, "topic": {"type": "string", "description": "e.g. academics, career, health, projects, family"}},
           ["text"]),
-    _tool("recall_facts", "Search what the crew remembers about Sai. Leave query empty for the latest facts.",
+    _tool("recall_facts", "Search what the crew remembers about the user. Leave query empty for the latest facts.",
           {"query": S}),
-    _tool("forget_fact", "Delete a remembered fact by its id when Sai asks you to forget it or it is outdated.",
+    _tool("forget_fact", "Delete a remembered fact by its id when the user asks you to forget it or it is outdated.",
           {"id": I}, ["id"]),
 ]
 
+# Lets one agent consult another. The brain runs it, not execute() below.
+CREW = [
+    _tool("ask_crewmate", "Ask another crew member for their view or help, like a team huddle. Use it when their "
+          "speciality genuinely helps: Sonu asks Indu when exam stress is hurting sleep, Lochu asks Jyothi whether "
+          "the laptop can handle a heavy build, Ramu asks Sonu about a career decision. Their answer is shown to "
+          "the user too. Ask one clear question.",
+          {"agent": {"type": "string", "enum": ["sonu", "indu", "lochu", "jyothi", "ramu"]}, "question": S},
+          ["agent", "question"]),
+]
+
 SCHEDULE = [
-    _tool("add_task", "Add a task, class, exam, assignment, deadline or study block to Sai's schedule.",
+    _tool("add_task", "Add a task, class, exam, assignment, deadline or study block to the user's schedule.",
           {"title": S,
            "kind": {"type": "string", "enum": ["task", "class", "exam", "assignment", "deadline", "study", "earning", "chore"]},
            "due": {"type": "string", "description": "Date or date-time, e.g. 2026-11-02 or 2026-11-02 14:00"}},
           ["title"]),
-    _tool("list_tasks", "List Sai's open tasks and schedule, soonest first.", {"include_done": {"type": "boolean"}}),
+    _tool("list_tasks", "List the user's open tasks and schedule, soonest first.", {"include_done": {"type": "boolean"}}),
     _tool("complete_task", "Mark a task as done by id.", {"id": I}, ["id"]),
 ]
 
@@ -50,28 +60,28 @@ JOBS = [
 ]
 
 MOOD = [
-    _tool("log_mood", "Record how Sai is feeling, with an optional 1-10 score and a short note.",
+    _tool("log_mood", "Record how the user is feeling, with an optional 1-10 score and a short note.",
           {"mood": S, "score": I, "note": S}, ["mood"]),
-    _tool("mood_history", "See Sai's recent mood check-ins to notice patterns.", {"limit": I}),
+    _tool("mood_history", "See the user's recent mood check-ins to notice patterns.", {"limit": I}),
 ]
 
 LOCHU = [
-    _tool("list_projects", "List the project folders inside Sai's projects directory.", {}),
+    _tool("list_projects", "List the project folders inside the user's projects directory.", {}),
     _tool("read_file", "Read a text file inside the projects directory (path relative to it). "
           ".env and vault files are off limits.", {"path": S}, ["path"]),
     _tool("list_files", "List files in a folder inside the projects directory.", {"path": S}),
-    _tool("list_credentials", "List the NAMES of credentials stored in Sai's vault. You never see the values. "
+    _tool("list_credentials", "List the NAMES of credentials stored in the user's vault. You never see the values. "
           "Use them in commands as $NAME and they are filled in when the command runs.", {}),
     _tool("run_command", "Run a shell command inside a project folder (build, test, debug, deploy, simulate). "
-          "Sai must approve every command in the app before it runs. Explain in one line why you need it.",
+          "The user must approve every command in the app before it runs. Explain in one line why you need it.",
           {"command": S, "folder": {"type": "string", "description": "Folder relative to the projects directory"},
            "why": S, "timeout_seconds": I},
           ["command", "why"]),
     _tool("start_process", "Launch a long-running process in the background (dev server, bot, simulation). "
-          "Needs Sai's approval.", {"name": S, "command": S, "folder": S, "why": S}, ["name", "command", "why"]),
-    _tool("stop_process", "Terminate a background process by name. Needs Sai's approval.",
+          "Needs the user's approval.", {"name": S, "command": S, "folder": S, "why": S}, ["name", "command", "why"]),
+    _tool("stop_process", "Terminate a background process by name. Needs the user's approval.",
           {"name": S, "why": S}, ["name"]),
-    _tool("relaunch_process", "Stop and restart a background process with the same command. Needs Sai's approval.",
+    _tool("relaunch_process", "Stop and restart a background process with the same command. Needs the user's approval.",
           {"name": S, "why": S}, ["name"]),
     _tool("process_logs", "Read the latest output of a background process.", {"name": S, "lines": I}, ["name"]),
     _tool("list_processes", "List background processes Lochu has started and whether they are running.", {}),
@@ -88,7 +98,7 @@ JYOTHI = [
           "Shared memory is kept.", {"agent": {"type": "string", "enum": health.AGENT_NAMES}}, ["agent"]),
 ]
 
-# Tools that wait for Sai's tap before they run.
+# Tools that wait for the user's tap before they run.
 NEEDS_APPROVAL = {"run_command", "start_process", "stop_process", "relaunch_process"}
 
 
@@ -179,7 +189,7 @@ def _execute(name: str, a: dict, agent: str):
         return procs._trim(text) if len(text) < 60000 else procs._trim(text[:60000]) + "\n[file truncated]"
     if name == "list_credentials":
         names = lockbox.credential_names()
-        return names or f"The vault is empty. Sai can add NAME=value lines to {config.VAULT_PATH}."
+        return names or f"The vault is empty. The user can add NAME=value lines to {config.VAULT_PATH}."
     if name == "run_command":
         return procs.run(a["command"], a.get("folder", ""), int(a.get("timeout_seconds", 120)))
     if name == "start_process":

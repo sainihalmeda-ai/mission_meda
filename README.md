@@ -51,8 +51,8 @@ Everything runs on your own computer. Memory is one file: `data/meda.sqlite3`.
 
 Keep the black window open while you use the crew. Close it to switch them off.
 
-**Updating:** download the new ZIP and extract it, then copy the `.env` file (and `vault.env` and the `data` folder,
-if you have them) from your old Mission MEDA folder into the new one. That keeps your key, memory and settings.
+**Updating:** nothing to do. Each time you double-click the launcher, it fetches the newest version from GitHub
+first, and never touches your `.env`, `vault.env` or `data` folder (your key, credentials and memory).
 
 **Optional, credentials for Lochu:** copy `vault.env.example` to `vault.env` and add lines like `GITHUB_TOKEN=ghp_...`.
 Lochu sees only the names and uses them in commands as `$GITHUB_TOKEN`. Values are hidden from anything the AI reads.
@@ -73,12 +73,16 @@ Your laptop must stay on while you use it.
 - **Say a name** first to call someone: "Sonu, ee roju plan enti?", "ఇందు, నాకు నిద్ర రావట్లేదు", "लोचू, server restart karo".
   Or tap an agent's face to talk only to them. "Auto" lets the crew decide.
 - Replies come back in the language you used. Telugu gets a Telugu voice, Hindi a Hindi voice, English an Indian English voice.
-- Code and commands appear on screen but aren't read aloud.
+- Code and commands appear on screen but aren't read aloud. Tap 🔈 on any message to hear it again.
+- **The crew talks to each other.** Say **"everyone"**, **"అందరూ"** or **"सब"** and two or three of them
+  answer in turn, building on each other like a huddle. Agents also consult each other on their own: Sonu might
+  ask Indu about your sleep before planning exam week, and you'll see and hear Indu's answer to Sonu.
 - **Board** shows Jyothi's health panel, your task list, applications and mood log.
 
 **Voices:** the crew speaks with natural Microsoft neural voices (Telugu: Shruti and Mohan, Hindi: Swara and Madhur,
 English: Neerja and Prabhat), fetched free over the internet by the app. Each agent gets a male or female voice with
-its own speed and pitch. If those voices can't be reached, the app falls back to your browser's built-in voices.
+its own speed and pitch. If those can't be reached, Google's Telugu/Hindi/English voice is the backup, and after that
+your browser's own voices.
 
 ## What it costs
 
@@ -113,6 +117,8 @@ Claude API chats aren't used to train models by default.
 | `meda/router.py` | Picks which agent answers. |
 | `meda/brain.py` | The Mindspace loop: gate, agent, tools, approvals. |
 | `meda/providers.py` | The AI brains (Gemini and Claude) behind one simple interface. |
+| `meda/voice.py` | Natural Telugu, Hindi and English voices. |
+| `launch.py`, `update.py` | What the launchers run: self-update, install new parts, then start. |
 | `meda/health.py` | Jyothi's budget, cooldowns and machine stats. |
 | `meda/tools.py` | Every tool the agents can use. |
 | `meda/lockbox.py` | The hard safety rules and the credential vault. |

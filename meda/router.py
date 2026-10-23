@@ -53,3 +53,28 @@ def pick(provider, text: str, last_agent: str | None) -> str:
         return choice if choice in agents.CREW else (last_agent or "sonu")
     except Exception:
         return last_agent or "sonu"
+
+
+GROUP_PROMPT = ROUTER_PROMPT.split("The message may be")[0] + """The user is asking the whole crew. Pick the 2 or 3
+assistants whose views matter most for this message, most relevant first. The message may be in Telugu, Hindi,
+English, or a mix."""
+
+GROUP_SCHEMA = {
+    "type": "object",
+    "properties": {"agents": {"type": "array", "items": {"type": "string", "enum": list(agents.CREW)}}},
+    "required": ["agents"],
+    "additionalProperties": False,
+}
+
+
+def pick_group(provider, text: str) -> list[str]:
+    """Choose who joins a huddle. Falls back to Sonu, Indu and Ramu."""
+    try:
+        data, tin, tout = provider.classify(GROUP_PROMPT, f"Message: {text}", GROUP_SCHEMA)
+        health.book("jyothi", tin, tout)
+        chosen = [a for a in dict.fromkeys(data.get("agents", [])) if a in agents.CREW][:3]
+        if len(chosen) >= 2:
+            return chosen
+    except Exception:
+        pass
+    return ["sonu", "indu", "ramu"]

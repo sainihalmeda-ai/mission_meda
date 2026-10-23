@@ -12,6 +12,5 @@ if [ ! -x ".venv/bin/python" ]; then
   python3 -m venv .venv
   .venv/bin/python -m pip install --upgrade pip >/dev/null
 fi
-# Installs anything new after an update; quick when nothing changed.
-.venv/bin/python -m pip install -q -r requirements.txt
-.venv/bin/python run.py "$@"
+# Updates itself, installs anything new, then starts the crew.
+.venv/bin/python launch.py "$@"

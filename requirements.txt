@@ -5,3 +5,4 @@ uvicorn>=0.30
 psutil>=5.9
 cryptography>=42
 edge-tts>=7.0
+gTTS>=2.5

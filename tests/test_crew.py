@@ -220,3 +220,37 @@ def test_voice_picks_language_and_agent_voice(monkeypatch):
     monkeypatch.setitem(sys.modules, "edge_tts", pytypes.SimpleNamespace(Communicate=FakeCommunicate))
     audio = asyncio.run(voice.synthesize("sonu", "**అన్న** చెప్తున్నా 🧑‍🎓"))
     assert audio == b"ID3" and seen["voice"] == "te-IN-MohanNeural" and "*" not in seen["text"]
+
+
+def test_agents_consult_each_other():
+    script = [
+        # Sonu decides to ask Indu
+        gresp([{"function_call": {"id": "c1", "name": "ask_crewmate",
+                                  "args": {"agent": "indu", "question": "He's sleeping 4 hours before exams. Advice?"}}}]),
+        # Indu answers the consult
+        gresp([{"text": "Sleep first, Sonu. Seven hours beats late-night revision."}]),
+        # Sonu wraps up using Indu's answer
+        gresp([{"text": "Indu cheppindi vinnava? Plan lo 11 PM ki nidra."}]),
+    ]
+    fake = FakeGemini(script)
+    r = Crew(GeminiProvider(fake)).handle("Sonu, exams ki ela prepare avvali?")
+    assert [m["agent"] for m in r["messages"]] == ["indu", "sonu"]
+    assert r["messages"][0]["to"] == "sonu"
+    # Indu's answer went back to Sonu as the tool result
+    fr = fake.calls[2]["contents"][-1].parts[0].function_response
+    assert fr.name == "ask_crewmate" and "Seven hours" in fr.response["result"]
+    # Indu's consult had no approval tools and couldn't consult further
+    indu_tools = [d.name for t in fake.calls[1]["config"].tools for d in (t.function_declarations or [])]
+    assert "ask_crewmate" not in indu_tools
+
+
+def test_huddle_gets_several_voices():
+    group = gt.GenerateContentResponse.model_validate({
+        "candidates": [{"content": {"role": "model", "parts": [{"text": '{"agents": ["ramu", "indu"]}'}]}}],
+        "usage_metadata": {"prompt_token_count": 5, "candidates_token_count": 2}})
+    fake = FakeGemini([group, gresp([{"text": "Breathe. Don't text him back yet."}]),
+                       gresp([{"text": "Ramu is right. Let's drink some water first."}])])
+    r = Crew(GeminiProvider(fake)).handle("అందరూ, naaku chala kopam ga undi")
+    assert [m["agent"] for m in r["messages"]] == ["ramu", "indu"]
+    second_prompt = " ".join(p.text for p in fake.calls[2]["contents"][-1].parts)
+    assert "Ramu: Breathe" in second_prompt

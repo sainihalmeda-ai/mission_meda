@@ -1,10 +1,12 @@
 """Natural Telugu, Hindi and English voices for the crew.
 
-Uses Microsoft Edge's free online voices (the same ones behind Edge's Read
-Aloud), so nothing needs installing on your computer. If they can't be
-reached, the web app falls back to whatever voices your browser has.
+First choice is Microsoft Edge's free online neural voices (the ones behind
+Edge's Read Aloud). If those fail, Google Translate's voice is the backup.
+Both are free and need nothing installed. If neither can be reached, the web
+app falls back to whatever voices your browser has.
 """
 
+import asyncio
 import hashlib
 import re
 from collections import OrderedDict
@@ -50,9 +52,27 @@ def pick(agent_key: str, text: str) -> tuple[str, str, str]:
     return voice, f"{rate:+d}%", f"{pitch:+d}Hz"
 
 
-async def synthesize(agent_key: str, text: str) -> bytes:
+async def _edge(clean: str, voice: str, rate: str, pitch: str) -> bytes:
     import edge_tts
 
+    audio = bytearray()
+    async for chunk in edge_tts.Communicate(clean, voice, rate=rate, pitch=pitch).stream():
+        if chunk["type"] == "audio":
+            audio.extend(chunk["data"])
+    return bytes(audio)
+
+
+def _google(clean: str, lang: str) -> bytes:
+    import io
+
+    from gtts import gTTS
+
+    buf = io.BytesIO()
+    gTTS(clean, lang=lang, tld="co.in").write_to_fp(buf)
+    return buf.getvalue()
+
+
+async def synthesize(agent_key: str, text: str) -> bytes:
     clean = speakable(text)
     if not clean:
         return b""
@@ -61,11 +81,22 @@ async def synthesize(agent_key: str, text: str) -> bytes:
     if key in _cache:
         _cache.move_to_end(key)
         return _cache[key]
-    audio = bytearray()
-    async for chunk in edge_tts.Communicate(clean, voice, rate=rate, pitch=pitch).stream():
-        if chunk["type"] == "audio":
-            audio.extend(chunk["data"])
-    data = bytes(audio)
+
+    data = b""
+    for attempt in range(2):
+        try:
+            data = await asyncio.wait_for(_edge(clean, voice, rate, pitch), timeout=20)
+            if data:
+                break
+        except Exception as e:
+            print(f"[voice] Edge voice try {attempt + 1} failed: {type(e).__name__}: {e}")
+    if not data:
+        try:
+            data = await asyncio.to_thread(_google, clean, language_of(clean))
+        except Exception as e:
+            print(f"[voice] Google voice failed too: {type(e).__name__}: {e}")
+            raise
+
     _cache[key] = data
     if len(_cache) > CACHE_SIZE:
         _cache.popitem(last=False)

@@ -14,7 +14,6 @@ if not exist ".venv\Scripts\python.exe" (
   py -3 -m venv .venv
   ".venv\Scripts\python.exe" -m pip install --upgrade pip >nul
 )
-rem Installs anything new after an update; quick when nothing changed.
-".venv\Scripts\python.exe" -m pip install -q -r requirements.txt
-".venv\Scripts\python.exe" run.py %*
+rem Updates itself, installs anything new, then starts the crew.
+".venv\Scripts\python.exe" launch.py %*
 pause

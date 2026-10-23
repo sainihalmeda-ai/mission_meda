@@ -49,6 +49,9 @@
   .msg .who { font-size: 12px; font-weight: 600; color: var(--c); margin-bottom: 2px; }
   .msg pre { background: #0007; padding: 8px 10px; border-radius: 8px; overflow-x: auto; white-space: pre; font-size: 13px; }
   .msg .acts { margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .msg.consult { margin-left: 24px; border-style: dashed; border-left-style: solid; }
+  .msg .replay { background: none; border: 0; padding: 0 0 0 8px; font-size: 13px; opacity: .6; }
+  .msg .replay:hover { opacity: 1; }
   .welcome { color: var(--muted); text-align: center; margin: auto; max-width: 440px; }
 
   .approve { align-self: flex-start; max-width: min(680px, 92%); background: #2a1f0a; border: 1px solid #f59e0b88; border-radius: 14px; padding: 12px 14px; }
@@ -116,7 +119,7 @@
       <div class="welcome" id="welcome">
         Tap the mic and talk. Say a name to call someone, like
         <b>"Sonu, ee roju plan enti?"</b> or <b>"Indu, I'm stressed"</b>.
-        Or just talk, and the right one will answer.
+        Or just talk, and the right one will answer. Say <b>"everyone"</b> or <b>"అందరూ"</b> to hear the whole crew.
       </div>
     </div>
     <div class="status" id="status"></div>
@@ -204,8 +207,10 @@ function addMsg(who, text, extra = {}) {
   if (who === "me") { div.className = "msg me"; div.textContent = text; }
   else {
     const m = state.crew[who] || { name: who, color: "#888" };
-    div.className = "msg ai"; div.style.setProperty("--c", m.color);
-    div.innerHTML = `<div class="who">${m.emoji || ""} ${m.name}</div>${render(text || "…")}`;
+    const to = extra.to && state.crew[extra.to] ? ` → ${state.crew[extra.to].name}` : "";
+    div.className = "msg ai" + (to ? " consult" : ""); div.style.setProperty("--c", m.color);
+    div.innerHTML = `<div class="who">${m.emoji || ""} ${m.name}${to}<button class="replay" title="Hear this again">🔈</button></div>${render(text || "…")}`;
+    div.querySelector(".replay").onclick = () => replay(who, text);
     if (extra.actions?.length) {
       const a = document.createElement("div"); a.className = "acts";
       a.textContent = "Used: " + [...new Set(extra.actions.map((x) => x.summary))].join(", ");
@@ -243,9 +248,10 @@ async function respond(promise) {
   state.busy = true; status("Thinking…"); stopListening();
   try {
     const r = await promise;
-    if (r.text) { addMsg(r.agent, r.text, r); speak(r.agent, r.text); }
-    if (r.pending) addApproval(r.pending, !!r.text);
-    if (!r.text && !r.pending) addMsg(r.agent, "(done)");
+    const msgs = (r.messages || [r]).filter((m) => m.text);
+    for (const m of msgs) { addMsg(m.agent, m.text, m); speak(m.agent, m.text); }
+    if (r.pending) addApproval(r.pending, msgs.length > 0);
+    if (!msgs.length && !r.pending) addMsg(r.agent, "(done)");
   } catch (e) {
     if (e.message !== "locked") addMsg("jyothi", "Something went wrong: " + e.message);
   } finally {
@@ -286,10 +292,12 @@ function speakable(text) {
   return text.replace(/```[\s\S]*?```/g, " (code on screen) ").replace(/[*_#>`]/g, "")
              .replace(/https?:\/\/\S+/g, "link on screen").replace(/\p{Extended_Pictographic}/gu, "");
 }
+// ---------- speech queue ----------
 // Natural voices come from the app's server; the browser's own voices are the backup.
-let player = null, speakSeq = 0;
+// Replies play one after another, so a huddle sounds like a conversation.
+let player = null, speakSeq = 0, queue = [];
 function stopSpeaking() {
-  speakSeq++;
+  speakSeq++; queue = [];
   if (player) { player.pause(); player = null; }
   if ("speechSynthesis" in window) speechSynthesis.cancel();
   state.speaking = false; setTalking(null);
@@ -298,41 +306,68 @@ function doneSpeaking() {
   state.speaking = false; setTalking(null);
   if (state.handsfree && !state.busy) startListening();
 }
-async function speak(agentKey, text) {
+function speak(agentKey, text) {
   if (!state.speak || !text) return;
-  stopSpeaking();
-  const seq = speakSeq;
+  const audio = fetchVoice(agentKey, text);  // start fetching right away
+  audio.catch(() => {});  // handled when its turn comes
+  queue.push({ agentKey, text, audio });
+  if (!state.speaking) playNext(speakSeq);
+}
+function fetchVoice(agentKey, text) {
+  return fetch("/api/speak", { method: "POST",
+    headers: { "content-type": "application/json", "x-meda-passcode": state.passcode },
+    body: JSON.stringify({ text, agent: agentKey }) })
+    .then((res) => (res.status === 204 ? null : res.ok ? res.blob() : Promise.reject(new Error("server voice " + res.status))));
+}
+async function playNext(seq) {
+  if (seq !== speakSeq) return;
+  const item = queue.shift();
+  if (!item) { doneSpeaking(); return; }
+  state.speaking = true; setTalking(item.agentKey);
   try {
-    const res = await fetch("/api/speak", { method: "POST",
-      headers: { "content-type": "application/json", "x-meda-passcode": state.passcode },
-      body: JSON.stringify({ text, agent: agentKey }) });
-    if (res.status === 204) return;
-    if (!res.ok) throw new Error("no server voice");
-    const url = URL.createObjectURL(await res.blob());
-    if (seq !== speakSeq) return;  // something newer started talking
-    player = new Audio(url);
-    player.onplay = () => { state.speaking = true; setTalking(agentKey); };
-    player.onended = () => { URL.revokeObjectURL(url); doneSpeaking(); };
-    await player.play();
+    const blob = await item.audio;
+    if (seq !== speakSeq) return;
+    if (blob) await playBlob(blob, seq);
   } catch (e) {
-    if (seq === speakSeq) speakBrowser(agentKey, text);
+    if (seq !== speakSeq) return;
+    if (e.name === "NotAllowedError") {
+      status("Tap 🔈 on a message to hear it (the browser blocked autoplay).");
+    } else if (!(await speakBrowser(item.agentKey, item.text))) {
+      status("Voice isn't available right now. Check your internet, then tap 🔈 on the message.");
+    }
   }
+  playNext(seq);
+}
+function playBlob(blob, seq) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    player = new Audio(url);
+    player.onended = () => { URL.revokeObjectURL(url); resolve(); };
+    player.onerror = () => { URL.revokeObjectURL(url); reject(new Error("audio error")); };
+    player.play().catch(reject);
+  });
+}
+function replay(agentKey, text) {
+  const wasOn = state.speak; state.speak = true;
+  stopSpeaking(); speak(agentKey, text); state.speak = wasOn;
 }
 function speakBrowser(agentKey, text) {
-  if (!("speechSynthesis" in window)) return;
-  const m = state.crew[agentKey] || { voice: {} };
-  speechSynthesis.cancel();
-  // Split into sentences so long replies don't get cut off by some browsers.
-  const parts = speakable(text).match(/[^.!?।\n]+[.!?।]?/g) || [];
-  parts.forEach((part, i) => {
-    if (!part.trim()) return;
-    const u = new SpeechSynthesisUtterance(part.trim());
-    u.lang = langOf(part);
-    u.voice = pickVoice(u.lang, m.voice?.gender);
-    u.pitch = m.voice?.pitch ?? 1; u.rate = m.voice?.rate ?? 1;
-    if (i === 0) u.onstart = () => { state.speaking = true; setTalking(agentKey); };
-    if (i === parts.length - 1) u.onend = doneSpeaking;
-    speechSynthesis.speak(u);
+  // Resolves true if the browser could speak it, false if it has no voice for that language.
+  return new Promise((resolve) => {
+    if (!("speechSynthesis" in window)) return resolve(false);
+    const m = state.crew[agentKey] || { voice: {} };
+    const lang = langOf(text);
+    const v = pickVoice(lang, m.voice?.gender);
+    if (!v || !v.lang.toLowerCase().startsWith(lang.slice(0, 2))) return resolve(false);
+    const parts = speakable(text).match(/[^.!?।\n]+[.!?।]?/g) || [];
+    if (!parts.length) return resolve(true);
+    parts.forEach((part, i) => {
+      const u = new SpeechSynthesisUtterance(part.trim());
+      u.lang = lang; u.voice = v;
+      u.pitch = m.voice?.pitch ?? 1; u.rate = m.voice?.rate ?? 1;
+      if (i === parts.length - 1) { u.onend = () => resolve(true); u.onerror = () => resolve(true); }
+      speechSynthesis.speak(u);
+    });
   });
 }
 $("speak").onclick = () => {
